@@ -1,0 +1,92 @@
+services:
+
+  omada-app:
+    image: docker.io/nfrastack/omada
+    container_name: omada-app
+    ports:
+      - "8088:8088"
+      - "8043:8043"
+      - "8888:8888"
+      - "8843:8843"
+      - "29810:29810/udp"
+      - "27001:27001/udp"
+      - "29811:29811"
+      - "29812:29812/udp"
+      - "29813:29813/udp"
+      - "29814:29814"
+      - "29815:29815/udp"
+      - "19810:19810/udp"
+      - "29816:29816/udp"
+      - "29817:29817/udp"
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+    environment:
+      - TIMEZONE=America/Vancouver
+
+      - DB_HOST=omada-db
+      - DB_PORT=27017
+      - DB_NAME=omada
+      - DB_USER=omadauser
+      - DB_PASS=omadapass
+    networks:
+      - services
+    restart: always
+
+  omada-db:
+    image: docker.io/nfrastack/mongo:7
+    container_name: omada-db
+    volumes:
+      - ./db:/data
+      - ./logs/mongo:/logs
+    environment:
+      - TIMEZONE=America/Vancouver
+
+      - ADMIN_USER=admin
+      - ADMIN_PASS=strongpassword
+
+      - DB01_NAME=omada
+      - DB01_USER=omadauser
+      - DB01_PASS=omadapass
+      - DB01_ROLE=omadauser:readWrite,dbOwner
+
+      - DB02_NAME=omada_data
+      - DB02_USER=omadauser
+      - DB02_PASS=omadapass
+      - DB02_ROLE=omadauser:readWrite,dbOwner
+    networks:
+      - services
+    restart: always
+
+  omada-db-backup:
+    image: docker.io/tiredofit/db-backup
+    container_name: omada-db-backup
+    volumes:
+      - ./dbbackup:/backup
+    environment:
+      - TIMEZONE=America/Vancouver
+
+      - DB01_HOST=omada-db
+      - DB01_TYPE=mongo
+      - DB01_NAME=omada
+      - DB01_USER=omadauser
+      - DB01_PASS=omadapass
+      - DB01_BACKUP_INTERVAL=1440
+      - DB01_BACKUP_BEGIN=0000
+      - DB01_CLEANUP_TIME=8640
+
+      - DB01_HOST=omada-db
+      - DB01_TYPE=mongo
+      - DB01_NAME=omada_data
+      - DB01_USER=omadauser
+      - DB01_PASS=omadapass
+      - DB01_BACKUP_INTERVAL=1440
+      - DB01_BACKUP_BEGIN=0000
+      - DB01_CLEANUP_TIME=8640
+    networks:
+      - services
+    restart: always
+networks:
+  services:
+    external: true
+

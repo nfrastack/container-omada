@@ -1,0 +1,29 @@
+#!/command/with-contenv bash
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+source /container/base/functions/container/init
+SERVICE_NAME="omada"
+prepare_service single
+
+check_container_initialized
+check_service_initialized init
+liftoff
+
+print_start "Starting Omada Controller $(grep -o "ADD: Omada .* |" /container/build/${IMAGE_NAME/\//_}/build.log | awk '{print $3}')"
+cd /app/lib
+exec sudo -Eu "${OMADA_USER}" java \
+                                    -server \
+                                    -Xms128m \
+                                    -Xmx1024m \
+                                    -XX:MaxHeapFreeRatio=60 \
+                                    -XX:MinHeapFreeRatio=30 \
+                                    -XX:+HeapDumpOnOutOfMemoryError \
+                                    -XX:HeapDumpPath="${LOG_PATH%/}"/java_heapdump.hprof \
+                                    -Djava.awt.headless=true \
+                                    --add-opens java.base/sun.security.x509=ALL-UNNAMED \
+                                    --add-opens java.base/sun.security.util=ALL-UNNAMED \
+                                    -cp "/app/lib/*:${CONFIG_PATH%/}" \
+                                    com.tplink.smb.omada.starter.OmadaLinuxMain
+

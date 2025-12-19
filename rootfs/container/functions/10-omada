@@ -1,0 +1,107 @@
+# Build a MongoDB URI from environment variables
+
+#!/bin/bash
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+omada_bootstrap_filesystem() {
+    create_folder \
+                    "${CONFIG_PATH}/,\
+                     ${DATA_PATH}" \
+                     "${OMADA_USER}":"${OMADA_GROUP}" 755
+
+    case "${LOG_TYPE,,}" in
+        file )
+            create_folder \
+                            "${LOG_PATH}" \
+                            "${OMADA_USER}":"${OMADA_GROUP}" 750
+
+            create_logrotate omada "${LOG_PATH%/}"/*.log "${OMADA_USER}" "${OMADA_GROUP}"
+        ;;
+    esac
+}
+
+omada_setup_application() {
+    if [ "${OMADA_SETUP_MODE,,}" = "auto" ] ; then
+        transform_var file \
+                            DB_HOST \
+                            DB_NAME \
+                            DB_PASS \
+                            DB_PORT \
+                            DB_URI \
+                            DB_USER \
+                            MONGO_URI
+
+        set_config() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
+            local quotes="${4:-false}"
+            if [[ "$value" == \"*\" ]]; then
+                quotes="quotes"
+                value="${value%\"}"
+                value="${value#\"}"
+            fi
+            if [ "$quotes" = "quotes" ]; then
+                value="\"$value\""
+            fi
+            if grep -qRE "^\s*${key}\s*=" "${file}"; then
+                sudo -u "${OMADA_USER}" sed -i "s|^\s*${key}\s*=.*|${key}=${value}|" "${file}"
+            else
+                echo "${key}=${value}" | silent sudo -u "${OMADA_USER}" tee  -a "${file}"
+            fi
+        }
+
+        local config_omada_path="${CONFIG_PATH%/}/omada.properties"
+        if [ ! -f "${config_omada_path}" ]; then
+            sudo -u "${OMADA_USER}" cp /container/data/omada/properties/omada.properties "${CONFIG_PATH}"/
+        fi
+        if [ "${CONFIG_PATH%/}" != "/app/properties" ]; then
+            ln -sf "${config_omada_path}" /app/properties/"$(basename "${config_omada_path}")"
+        fi
+        set_config manage.http.port "${LISTEN_MANAGE_HTTP_PORT}" "${config_omada_path}"
+        set_config manage.https.port "${LISTEN_MANAGE_HTTPS_PORT}" "${config_omada_path}"
+        set_config portal.http.port "${LISTEN_PORTAL_HTTP_PORT}" "${config_omada_path}"
+        set_config portal.https.port "${LISTEN_PORTAL_HTTPS_PORT}" "${config_omada_path}"
+        set_config port.app.discovery "${LISTEN_APP_DISCOVERY_PORT}" "${config_omada_path}"
+        set_config port.adopt.v1 "${LISTEN_ADOPT_V1_PORT}" "${config_omada_path}"
+        set_config port.upgrade.v1 "${LISTEN_UPGRADE_V1_PORT}" "${config_omada_path}"
+        set_config port.manager.v1 "${LISTEN_MANAGER_V1_PORT}" "${config_omada_path}"
+        set_config port.manager.v2 "${LISTEN_MANAGER_V2_PORT}" "${config_omada_path}"
+        set_config port.discovery "${LISTEN_DISCOVERY_PORT}" "${config_omada_path}"
+        set_config port.transfer.v2 "${LISTEN_TRANSFER_V2_PORT}" "${config_omada_path}"
+        set_config port.rtty "${LISTEN_RTTY_PORT}" "${config_omada_path}"
+        set_config port.olt.discovery "${LISTEN_OLT_DISCOVERY_PORT}" "${config_omada_path}"
+        set_config port.device.monitor "${LISTEN_DEVICE_MONITOR_PORT}" "${config_omada_path}"
+
+        if [ -z "${MONGO_URI}" ]; then
+            if [ -n "${DB_USER}" ]; then
+                    if [ -n "${DB_PASS}" ]; then
+                        user="${DB_USER}:${DB_PASS}@"
+                    else
+                        user="${DB_USER}@"
+                    fi
+                fi
+                if [ -n "${DB_OPTIONS}" ]; then
+                    options="?${DB_OPTIONS}"
+                fi
+                export MONGO_URI="mongodb://${user}${DB_HOST}:${DB_PORT}/${DB_NAME}${options}"
+        fi
+        set_config mongo.external true "${config_omada_path}"
+        set_config eap.mongod.uri "${MONGO_URI}" "${config_omada_path}"
+
+        local config_log_path="${CONFIG_PATH%/}/log4j2.properties"
+        if [ "${CONFIG_PATH%/}" != "/app/properties" ]; then
+            ln -sf "${config_log_path}" /app/properties/"$(basename "${config_log_path}")"
+        fi
+
+        if [ ! -f "${config_log_path}" ]; then
+            sudo -u "${OMADA_USER}" cp /container/data/omada/properties/log4j2.properties "${CONFIG_PATH}"/
+        fi
+        set_config property.filePath "${LOG_PATH%/}" "${config_log_path}"
+
+    else
+        print_notice "Manual Mode Activated"
+    fi
+}

@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+source /container/base/functions/container/init
+SERVICE_NAME="omada"
+
+prepare_service
+
+sanity_db mongodb
+db_ready mongodb
+omada_bootstrap_filesystem
+omada_setup_application
+
+liftoff
